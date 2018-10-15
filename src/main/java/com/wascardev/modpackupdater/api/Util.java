@@ -70,6 +70,23 @@ public class Util {
         return fileHash.equals(testChecksum);
     }
 
+    public static String getDefaultMinecraftLauncherPath()
+    {
+        switch (getPlatform())
+        {
+            case WINDOWS:
+                return checkIfFileExists(new File(new File(System.getenv("%programfiles% (x86)")), "Minecraft/MinecraftLauncher.exe").getPath());
+            case LINUX:
+                return checkIfFileExists("/usr/bin/minecraft-launcher");
+        }
+        return "";
+    }
+
+    private static String checkIfFileExists(String path)
+    {
+        return (new File(path).exists()) ? path : "";
+    }
+
     public static String sha1(File file) throws NoSuchAlgorithmException, IOException {
         MessageDigest sha1 = MessageDigest.getInstance("SHA1");
         FileInputStream fis = new FileInputStream(file);

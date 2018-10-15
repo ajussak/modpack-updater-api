@@ -1,7 +1,12 @@
 package com.wascardev.modpackupdater.api;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import com.wascardev.modpackupdater.api.event.DownloadEvent;
+import com.wascardev.modpackupdater.api.event.ErrorEvent;
+import com.wascardev.modpackupdater.api.event.Event;
+import com.wascardev.modpackupdater.api.event.EventListener;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -14,27 +19,47 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
+@SuppressWarnings({"WeakerAccess", "unused"})
 public class ModpackUpdater implements Runnable {
 
     private static final File LAUNCHER_PATH = Util.getClientDirectory("minecraft");
     private final static Logger LOGGER = Logger.getLogger("ModPack Updater");
 
     private File modpackPath;
+    private File clientConfigPath;
 
-    private WorkState currentState;
-    private EventListener eventListener = null;
     private ModpackConfig modpackConfig;
-    private ClientConfig clientConfig = new ClientConfig();
+    private ClientConfig clientConfig;
+    private Gson gson;
+
+    private List<EventListener> eventListeners = new ArrayList<>();
+
+    private int filesToDownload;
+    private int downloadingFile = 0;
 
     public ModpackUpdater(URL jsonURL) throws IOException {
         this(new Gson().fromJson(new InputStreamReader(jsonURL.openStream()), ModpackConfig.class));
     }
 
-    public ModpackUpdater(ModpackConfig modpackConfig)
-    {
+    public ModpackUpdater(ModpackConfig modpackConfig) throws IOException {
         this.modpackConfig = modpackConfig;
         modpackPath = Util.getClientDirectory(modpackConfig.getName());
-        currentState = WorkState.READY;
+        clientConfigPath = new File(modpackPath, "updater_config.json");
+
+        GsonBuilder gsonBuilder = new GsonBuilder();
+        gsonBuilder.setPrettyPrinting();
+
+        gson = gsonBuilder.create();
+
+        if (clientConfigPath.exists())
+            clientConfig = gson.fromJson(new FileReader(clientConfigPath), ClientConfig.class);
+        else {
+            clientConfig = new ClientConfig();
+            FileWriter fileWriter = new FileWriter(clientConfigPath);
+            gson.toJson(clientConfig, fileWriter);
+            fileWriter.flush();
+            fileWriter.close();
+        }
     }
 
     private void downloadFromUrl(URL url, File localFile) throws Exception {
@@ -58,9 +83,8 @@ public class ModpackUpdater implements Runnable {
 
             while ((len = is.read(buffer)) > 0) {
                 downloadedFileSize += len;
-                int currentProgress = (int) ((((double) downloadedFileSize) / ((double) completeFileSize)) * 100d);
-                if(eventListener != null)
-                    eventListener.onDownloadStateChanged(localFile.getName(), currentProgress);
+                float currentProgress = (float) downloadedFileSize / (float) completeFileSize;
+                sendEvent(new DownloadEvent(currentProgress,((float) this.downloadingFile / (float) this.filesToDownload) + currentProgress * (1.0f / this.filesToDownload)));
                 fos.write(buffer, 0, len);
             }
         } finally {
@@ -77,7 +101,7 @@ public class ModpackUpdater implements Runnable {
     }
 
     private void download() throws Exception {
-        changeState(WorkState.DOWNLOADING);
+        sendEvent(new Event(WorkState.CHECKING));
 
         List<ModpackConfig.File> selectedOptionalFiles = modpackConfig.getOptionalFiles().getFiles().stream().filter(e -> clientConfig.getSelectedOptionalMods().contains(e.path)).collect(Collectors.toList());
 
@@ -89,36 +113,38 @@ public class ModpackUpdater implements Runnable {
         authorizedFile.addAll(optionalFileGroup.getFiles());
 
         File modsFolder = new File(modpackPath, "mods");
-
-        if(modsFolder.exists())
+        if (modsFolder.exists())
             deleteUnknownFiles(authorizedFile, modpackPath, modsFolder);
+
+        authorizedFile.addAll(modpackConfig.getMinecraftFiles().getFiles());
+
+        filesToDownload = authorizedFile.size();
 
         downloadFileGroup(modpackConfig.getModpackFiles(), modpackPath);
         downloadFileGroup(optionalFileGroup, modpackPath);
         downloadFileGroup(modpackConfig.getMinecraftFiles(), LAUNCHER_PATH);
+        sendEvent(new DownloadEvent(1f, 1f));
     }
 
-    private void deleteUnknownFiles(List<ModpackConfig.File> files, File directory, File base)
-    {
-        for(File currentFile : Objects.requireNonNull(base.listFiles()))
-        {
-            if(currentFile.isDirectory())
+    private void deleteUnknownFiles(List<ModpackConfig.File> files, File directory, File base) throws IOException {
+        for (File currentFile : Objects.requireNonNull(base.listFiles())) {
+            if (currentFile.isDirectory())
                 deleteUnknownFiles(files, directory, currentFile);
-            else if(!files.contains(new ModpackConfig.File(directory.toURI().relativize(currentFile.toURI()).getPath(), ""))) {
+            else if (!files.contains(new ModpackConfig.File(directory.toURI().relativize(currentFile.toURI()).getPath(), ""))) {
                 LOGGER.log(Level.INFO, "Unknown file deleted : " + currentFile.getPath());
-                currentFile.delete();
+                if (!currentFile.delete())
+                    throw new IOException("Cannot delete : " + currentFile.getAbsolutePath());
             }
         }
     }
 
     private void downloadFileGroup(ModpackConfig.FileGroup fileGroup, File destinationFolder) throws Exception {
-        for(ModpackConfig.File modpackFile : fileGroup.getFiles())
-        {
+        for (ModpackConfig.File modpackFile : fileGroup.getFiles()) {
             File currentFile = new File(destinationFolder, modpackFile.getPath());
-            if(!currentFile.exists() || !Util.verifyChecksum(currentFile, modpackFile.getHash()))
-            {
+            if (!currentFile.exists() || !Util.verifyChecksum(currentFile, modpackFile.getHash())) {
                 downloadFromUrl(new URL(appendSegmentToPath(fileGroup.getUrl(), modpackFile.getPath())), currentFile);
             }
+            this.downloadingFile++;
         }
     }
 
@@ -136,7 +162,7 @@ public class ModpackUpdater implements Runnable {
 
     private void createProfile() throws IOException {
         LOGGER.log(Level.INFO, "Creating profile...");
-        changeState(WorkState.CREATING_PROFILE);
+        sendEvent(new Event(WorkState.CREATING_PROFILE));
         File file = new File(LAUNCHER_PATH, "launcher_profiles.json");
         Gson gson = new Gson();
         JsonObject jsonObject = (file.exists()) ? gson.fromJson(new InputStreamReader(new FileInputStream(file)), JsonObject.class) : new JsonObject();
@@ -148,7 +174,7 @@ public class ModpackUpdater implements Runnable {
         if (profiles == null)
             profiles = new JsonObject();
 
-        if(profiles.get(modpackConfig.getName()) == null || clientConfig.getForceUpdate()) {
+        if (profiles.get(modpackConfig.getName()) == null || clientConfig.getForceUpdate()) {
             JsonObject modpackProfile = new JsonObject();
             profiles.remove(modpackConfig.getName());
             modpackProfile.addProperty("name", modpackConfig.getName());
@@ -160,10 +186,22 @@ public class ModpackUpdater implements Runnable {
             jsonObject.remove("profiles");
             jsonObject.add("profiles", profiles);
         }
-        jsonObject.remove("selectedProfile");
-        jsonObject.addProperty("selectedProfile", modpackConfig.getName());
+        //jsonObject.remove("selectedProfile");
+        //jsonObject.addProperty("selectedProfile", modpackConfig.getName());
         Files.write(file.toPath(), gson.toJson(jsonObject).getBytes());
-        LOGGER.log(Level.INFO, "Done");
+        LOGGER.log(Level.INFO, "Installed");
+
+    }
+
+    private void startGame() throws IOException {
+        sendEvent(new Event(WorkState.LAUNCHING));
+        String path = clientConfig.getMinecraftLauncherPath();
+
+        if (path.equals(""))
+            return;
+
+        ProcessBuilder processBuilder = path.endsWith(".jar") ? new ProcessBuilder("java", "-jar", path) : new ProcessBuilder(path);
+        processBuilder.start();
     }
 
     @Override
@@ -171,35 +209,33 @@ public class ModpackUpdater implements Runnable {
         try {
             download();
             createProfile();
+            startGame();
+            sendEvent(new Event(WorkState.FINISHED));
         } catch (Exception e) {
-            e.printStackTrace();
-            changeState(WorkState.ERROR);
-            if(eventListener != null)
-                eventListener.onError(e);
+            sendEvent(new ErrorEvent(e));
         }
     }
 
-    private void changeState(WorkState workState)
-    {
-        currentState = workState;
-        if(eventListener != null)
-            eventListener.onStateChanged(currentState);
+    private void sendEvent(Event event) {
+        eventListeners.forEach(eventListener -> eventListener.onEvent(event));
     }
 
-    public WorkState getCurrentState() {
-        return currentState;
-    }
-
-    public ModpackConfig.FileGroup getOptionalFiles()
-    {
+    public ModpackConfig.FileGroup getOptionalFiles() {
         return modpackConfig.getOptionalFiles();
     }
 
-    public void setEventListener(EventListener eventListener) {
-        this.eventListener = eventListener;
+    public void addEventListener(EventListener eventListener) {
+        eventListeners.add(eventListener);
     }
 
     public ClientConfig getClientConfig() {
         return clientConfig;
+    }
+
+    public void saveClientConfig() throws IOException {
+        FileWriter fileWriter = new FileWriter(clientConfigPath);
+        gson.toJson(clientConfig, fileWriter);
+        fileWriter.flush();
+        fileWriter.close();
     }
 }
