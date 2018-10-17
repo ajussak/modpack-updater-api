@@ -10,6 +10,16 @@ public class ClientConfig {
     private boolean forceUpdate = false;
     private String minecraftLauncherPath = Util.getDefaultMinecraftLauncherPath();
 
+    public ClientConfig() {
+    }
+
+    public ClientConfig(int ram, List<String> selectedOptionalMods, boolean forceUpdate, String minecraftLauncherPath) {
+        this.ram = ram;
+        this.selectedOptionalMods = selectedOptionalMods;
+        this.forceUpdate = forceUpdate;
+        this.minecraftLauncherPath = minecraftLauncherPath;
+    }
+
     public int getRam() {
         return ram;
     }
