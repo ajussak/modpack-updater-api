@@ -103,26 +103,25 @@ public class ModpackUpdater implements Runnable {
     private void download() throws Exception {
         sendEvent(new Event(WorkState.CHECKING));
 
-        List<ModpackConfig.File> selectedOptionalFiles = modpackConfig.getOptionalFiles().getFiles().stream().filter(e -> clientConfig.getSelectedOptionalMods().contains(e.path)).collect(Collectors.toList());
+        List<ModpackConfig.File> selectedOptionalFiles = modpackConfig.getOptionalFiles().stream().filter(e -> clientConfig.getSelectedOptionalMods().contains(e.path)).collect(Collectors.toList());
 
-        ModpackConfig.FileGroup optionalFileGroup = new ModpackConfig.FileGroup(modpackConfig.getOptionalFiles().getUrl(), selectedOptionalFiles);
 
         List<ModpackConfig.File> authorizedFile = new ArrayList<>();
 
-        authorizedFile.addAll(modpackConfig.getModpackFiles().getFiles());
-        authorizedFile.addAll(optionalFileGroup.getFiles());
+        authorizedFile.addAll(modpackConfig.getModpackFiles());
+        authorizedFile.addAll(selectedOptionalFiles);
 
         File modsFolder = new File(modpackPath, "mods");
         if (modsFolder.exists())
             deleteUnknownFiles(authorizedFile, modpackPath, modsFolder);
 
-        authorizedFile.addAll(modpackConfig.getMinecraftFiles().getFiles());
+        authorizedFile.addAll(modpackConfig.getMinecraftFiles());
 
         filesToDownload = authorizedFile.size();
 
-        downloadFileGroup(modpackConfig.getModpackFiles(), modpackPath);
-        downloadFileGroup(optionalFileGroup, modpackPath);
-        downloadFileGroup(modpackConfig.getMinecraftFiles(), LAUNCHER_PATH);
+        downloadFileGroup(modpackConfig.getModpackFiles(), new URL(modpackConfig.getDownloadFolderURL(), "modpack"), modpackPath);
+        downloadFileGroup(selectedOptionalFiles, new URL(modpackConfig.getDownloadFolderURL(), "optionals"), modpackPath);
+        downloadFileGroup(modpackConfig.getMinecraftFiles(), new URL(modpackConfig.getDownloadFolderURL(), "minecraft"), LAUNCHER_PATH);
         sendEvent(new DownloadEvent(1f, 1f));
     }
 
@@ -138,11 +137,11 @@ public class ModpackUpdater implements Runnable {
         }
     }
 
-    private void downloadFileGroup(ModpackConfig.FileGroup fileGroup, File destinationFolder) throws Exception {
-        for (ModpackConfig.File modpackFile : fileGroup.getFiles()) {
+    private void downloadFileGroup(List<ModpackConfig.File> fileGroup, URL downloadFolderURL, File destinationFolder) throws Exception {
+        for (ModpackConfig.File modpackFile : fileGroup) {
             File currentFile = new File(destinationFolder, modpackFile.getPath());
             if (!currentFile.exists() || !Util.verifyChecksum(currentFile, modpackFile.getHash())) {
-                downloadFromUrl(new URL(appendSegmentToPath(fileGroup.getUrl(), modpackFile.getPath())), currentFile);
+                downloadFromUrl(new URL(appendSegmentToPath(downloadFolderURL.getPath(), modpackFile.getPath())), currentFile);
             }
             this.downloadingFile++;
         }
@@ -220,7 +219,7 @@ public class ModpackUpdater implements Runnable {
         eventListeners.forEach(eventListener -> eventListener.onEvent(event));
     }
 
-    public ModpackConfig.FileGroup getOptionalFiles() {
+    public List<ModpackConfig.File> getOptionalFiles() {
         return modpackConfig.getOptionalFiles();
     }
 

@@ -23,7 +23,10 @@ public class ModpackManager extends Application {
     private FileListTab modpackFilesTab;
     private FileListTab optionalFilesTab;
     private TextField modpackNameTextfield;
-    private File currentProject = null;
+    private File currentProject;
+    private File minecraftFolder;
+    private File modpackFolder;
+    private File optionalFolder;
 
     public static void main(String[] args) {
         Application.launch(ModpackManager.class, args);
@@ -70,9 +73,9 @@ public class ModpackManager extends Application {
         TabPane tabPane = new TabPane();
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-        minecraftFilesTab = new FileListTab("Minecraft Files");
-        modpackFilesTab = new FileListTab("Modpack Files");
-        optionalFilesTab = new FileListTab("Modpack Optionals Files");
+        minecraftFilesTab = new FileListTab("Minecraft Files", minecraftFolder);
+        modpackFilesTab = new FileListTab("Modpack Files", modpackFolder);
+        optionalFilesTab = new FileListTab("Modpack Optionals Files", optionalFolder);
 
         tabPane.getTabs().addAll(minecraftFilesTab, modpackFilesTab, optionalFilesTab);
 
@@ -96,9 +99,9 @@ public class ModpackManager extends Application {
 
                 modpackNameTextfield.setText(jsonObject.getAsJsonPrimitive("name").getAsString());
 
-                minecraftFilesTab.loadTabFromJSON(jsonObject.getAsJsonObject("minecraftFiles"));
-                modpackFilesTab.loadTabFromJSON(jsonObject.getAsJsonObject("modpackFiles"));
-                optionalFilesTab.loadTabFromJSON(jsonObject.getAsJsonObject("optionalFiles"));
+                minecraftFilesTab.loadTabFromJSON(jsonObject.getAsJsonArray("minecraftFiles"));
+                modpackFilesTab.loadTabFromJSON(jsonObject.getAsJsonArray("modpackFiles"));
+                optionalFilesTab.loadTabFromJSON(jsonObject.getAsJsonArray("optionalFiles"));
 
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
@@ -112,7 +115,7 @@ public class ModpackManager extends Application {
             }
 
             try {
-                saveJson(this.currentProject, true);
+                saveJson(this.currentProject);
             } catch (IOException | NoSuchAlgorithmException e) {
                 e.printStackTrace();
             }
@@ -130,7 +133,7 @@ public class ModpackManager extends Application {
             File file = fileChooser.showSaveDialog(primaryStage);
 
             try {
-                saveJson(file, false);
+                saveJson(file);
             } catch (IOException | NoSuchAlgorithmException e) {
                 e.printStackTrace();
             }
@@ -141,14 +144,14 @@ public class ModpackManager extends Application {
         primaryStage.show();
     }
 
-    private void saveJson(File file, boolean workingDirectory) throws IOException, NoSuchAlgorithmException {
+    private void saveJson(File file) throws IOException, NoSuchAlgorithmException {
         if (file != null) {
             JsonObject jsonObject = new JsonObject();
             jsonObject.add("name", new JsonPrimitive(modpackNameTextfield.getText().replace(" ", "-")));
 
-            jsonObject.add("minecraftFiles", minecraftFilesTab.generateJsonObject(workingDirectory));
-            jsonObject.add("modpackFiles", modpackFilesTab.generateJsonObject(workingDirectory));
-            jsonObject.add("optionalFiles", optionalFilesTab.generateJsonObject(workingDirectory));
+            jsonObject.add("minecraftFiles", minecraftFilesTab.generateJsonArray());
+            jsonObject.add("modpackFiles", modpackFilesTab.generateJsonArray());
+            jsonObject.add("optionalFiles", optionalFilesTab.generateJsonArray());
 
             Writer writer = new FileWriter(file);
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -169,6 +172,10 @@ public class ModpackManager extends Application {
 
         this.currentProject = save ? fileChooser.showSaveDialog(stage) : fileChooser.showOpenDialog(stage);
 
+        this.minecraftFolder = new File(currentProject, "minecraft");
+        this.optionalFolder = new File(currentProject, "optional");
+        this.modpackFolder = new File(currentProject, "modpack");
+
         stage.setTitle("ModPack Manager - " + this.currentProject.getName());
     }
 
@@ -176,8 +183,5 @@ public class ModpackManager extends Application {
     {
         currentProject = null;
         modpackNameTextfield.setText("");
-        minecraftFilesTab.reset();
-        modpackFilesTab.reset();
-        optionalFilesTab.reset();
     }
 }

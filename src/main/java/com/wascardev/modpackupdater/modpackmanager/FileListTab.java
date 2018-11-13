@@ -7,12 +7,11 @@ import com.google.gson.JsonPrimitive;
 import com.wascardev.modpackupdater.api.Util;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.scene.control.*;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
-import javafx.stage.DirectoryChooser;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,47 +20,16 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 public class FileListTab extends Tab {
 
-    private File workingDirectory;
     private TableView<FileValue> table;
-    private TextField urlField;
-    private TextField workingDirectoryPathField;
+    private File workingDirectory;
 
-    public FileListTab(String text) {
+    public FileListTab(String text, File workingDirectory) {
         super(text);
 
-        VBox vBox = new VBox();
-        vBox.setFillWidth(true);
-
-        HBox hBox1 = new HBox();
-
-        this.workingDirectoryPathField = new TextField();
-        HBox.setHgrow(workingDirectoryPathField, Priority.ALWAYS);
-
-        Button selectFile = new Button("Open Folder");
-
-        selectFile.setOnAction(e -> {
-            DirectoryChooser chooser = new DirectoryChooser();
-            File folder = chooser.showDialog(vBox.getScene().getWindow());
-            if (folder != null) {
-                workingDirectoryPathField.setText(folder.getAbsolutePath());
-            }
-        });
-
-        Button reload = new Button("Generate");
-
-        hBox1.getChildren().addAll(new Label("Working Directory : "), workingDirectoryPathField, selectFile, reload);
-
-        HBox hBox2 = new HBox();
-
-        this.urlField = new TextField();
-
-        HBox.setHgrow(urlField, Priority.ALWAYS);
-
-        hBox2.getChildren().addAll(new Label("Download Folder URL : "), urlField);
+        this.workingDirectory = workingDirectory;
 
         this.table = new TableView<>();
 
@@ -79,20 +47,7 @@ public class FileListTab extends Tab {
 
         table.setItems(FXCollections.observableArrayList());
 
-        reload.setOnAction(e -> {
-            workingDirectory = new File(workingDirectoryPathField.getText());
-
-            List<FileValue> localFilesValues = scanFolder(workingDirectory);
-
-            table.getItems().removeIf(fileValue -> !localFilesValues.contains(fileValue));
-            table.getItems().addAll(localFilesValues.stream().filter(fileValue -> !table.getItems().contains(fileValue)).collect(Collectors.toList()));
-        });
-
-        VBox.setVgrow(table, Priority.ALWAYS);
-
-        vBox.getChildren().addAll(hBox1, hBox2, table);
-
-        this.setContent(vBox);
+        this.setContent(table);
     }
 
     private List<FileValue> scanFolder(File folder) {
@@ -136,14 +91,7 @@ public class FileListTab extends Tab {
         }
     }
 
-    public JsonObject generateJsonObject(boolean workingDirectory) throws IOException, NoSuchAlgorithmException {
-
-        JsonObject jsonObject = new JsonObject();
-        jsonObject.add("url", new JsonPrimitive(urlField.getText()));
-
-        if (workingDirectory)
-            jsonObject.add("workingDirectory", new JsonPrimitive(workingDirectoryPathField.getText()));
-
+    public JsonArray generateJsonArray() throws IOException, NoSuchAlgorithmException {
         JsonArray jsonArray = new JsonArray();
 
         for (FileValue value : table.getItems()) {
@@ -153,40 +101,17 @@ public class FileListTab extends Tab {
             jsonArray.add(fileObject);
         }
 
-        jsonObject.add("files", jsonArray);
-
-        return jsonObject;
-    }
-
-    public void reset() {
-        this.urlField.setText("");
-        this.workingDirectoryPathField.setText("");
-        this.table.getItems().clear();
-    }
-
-    public void setWorkingDirectory(String uri) {
-        workingDirectoryPathField.setText(uri);
-        workingDirectory = new File(uri);
-    }
-
-    public void setUrl(String url) {
-        urlField.setText(url);
+        return jsonArray;
     }
 
     public ObservableList<FileValue> getTableItems() {
         return table.getItems();
     }
 
-    public void loadTabFromJSON(JsonObject jsonObject)
+    public void loadTabFromJSON(JsonArray jsonArray)
     {
-        String workingDirectory = jsonObject.get("workingDirectory").getAsString();
-
-        this.setUrl(jsonObject.get("url").getAsString());
-        this.setWorkingDirectory(workingDirectory);
-
         ObservableList<FileListTab.FileValue> items = this.getTableItems();
 
-        JsonArray jsonArray = jsonObject.getAsJsonArray("files");
         Iterator<JsonElement> iterator = jsonArray.iterator();
         while (iterator.hasNext())
         {
@@ -199,5 +124,7 @@ public class FileListTab extends Tab {
         }
     }
 
-
+    public void setWorkingDirectory(File workingDirectory) {
+        this.workingDirectory = workingDirectory;
+    }
 }
