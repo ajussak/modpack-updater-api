@@ -84,7 +84,7 @@ public class ModpackUpdater implements Runnable {
             while ((len = is.read(buffer)) > 0) {
                 downloadedFileSize += len;
                 float currentProgress = (float) downloadedFileSize / (float) completeFileSize;
-                sendEvent(new DownloadEvent(currentProgress,((float) this.downloadingFile / (float) this.filesToDownload) + currentProgress * (1.0f / this.filesToDownload)));
+                sendEvent(new DownloadEvent(currentProgress, ((float) this.downloadingFile / (float) this.filesToDownload) + currentProgress * (1.0f / this.filesToDownload)));
                 fos.write(buffer, 0, len);
             }
         } finally {
@@ -140,8 +140,8 @@ public class ModpackUpdater implements Runnable {
     private void downloadFileGroup(List<ModpackConfig.File> fileGroup, URL downloadFolderURL, File destinationFolder) throws Exception {
         for (ModpackConfig.File modpackFile : fileGroup) {
             File currentFile = new File(destinationFolder, modpackFile.getPath());
-            if (!currentFile.exists() || !Util.verifyChecksum(currentFile, modpackFile.getHash())) {
-                downloadFromUrl(new URL(appendSegmentToPath(downloadFolderURL.getPath(), modpackFile.getPath())), currentFile);
+            if (clientConfig.getForceUpdate() || !currentFile.exists() || !Util.verifyChecksum(currentFile, modpackFile.getHash())) {
+                downloadFromUrl(new URL(appendSegmentToPath(fileGroup.getUrl(), modpackFile.getPath())), currentFile);
             }
             this.downloadingFile++;
         }
@@ -185,22 +185,24 @@ public class ModpackUpdater implements Runnable {
             jsonObject.remove("profiles");
             jsonObject.add("profiles", profiles);
         }
-        //jsonObject.remove("selectedProfile");
-        //jsonObject.addProperty("selectedProfile", modpackConfig.getName());
         Files.write(file.toPath(), gson.toJson(jsonObject).getBytes());
         LOGGER.log(Level.INFO, "Installed");
 
     }
 
-    private void startGame() throws IOException {
+    private void startGame() throws IOException, MinecraftLauncerNotFoundException {
         sendEvent(new Event(WorkState.LAUNCHING));
         String path = clientConfig.getMinecraftLauncherPath();
 
         if (path.equals(""))
-            return;
+            throw new MinecraftLauncerNotFoundException();
 
         ProcessBuilder processBuilder = path.endsWith(".jar") ? new ProcessBuilder("java", "-jar", path) : new ProcessBuilder(path);
         processBuilder.start();
+    }
+
+    public void setClientConfig(ClientConfig clientConfig) {
+        this.clientConfig = clientConfig;
     }
 
     @Override
@@ -210,6 +212,8 @@ public class ModpackUpdater implements Runnable {
             createProfile();
             startGame();
             sendEvent(new Event(WorkState.FINISHED));
+        } catch (MinecraftLauncerNotFoundException e) {
+            sendEvent(new Event(WorkState.MINECRAFT_LAUNCHER_NOT_FOUND));
         } catch (Exception e) {
             sendEvent(new ErrorEvent(e));
         }

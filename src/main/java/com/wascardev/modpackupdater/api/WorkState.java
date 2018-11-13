@@ -2,12 +2,12 @@ package com.wascardev.modpackupdater.api;
 
 public enum WorkState {
 
-    READY,
     CHECKING,
     DOWNLOADING,
     CREATING_PROFILE,
     LAUNCHING,
     FINISHED,
-    ERROR
+    ERROR,
+    MINECRAFT_LAUNCHER_NOT_FOUND
 
 }
