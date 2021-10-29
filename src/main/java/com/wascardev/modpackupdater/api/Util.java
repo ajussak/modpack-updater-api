@@ -75,7 +75,7 @@ public class Util {
         switch (getPlatform())
         {
             case WINDOWS:
-                return checkIfFileExists(new File(new File(System.getenv("%programfiles% (x86)")), "Minecraft/MinecraftLauncher.exe").getPath());
+                return checkIfFileExists(new File(new File(System.getenv("programfiles(x86)")), "Minecraft/MinecraftLauncher.exe").getPath());
             case LINUX:
                 return checkIfFileExists("/usr/bin/minecraft-launcher");
         }
