@@ -97,7 +97,7 @@ public class FileListTab extends Tab {
         for (FileValue value : table.getItems()) {
             JsonObject fileObject = new JsonObject();
             fileObject.add("path", new JsonPrimitive(value.getPath()));
-            fileObject.add("hash", new JsonPrimitive(value.getIntegrityCheckBox().isSelected() ? Util.sha1(new File(this.workingDirectory, value.getPath())) : "none"));
+            fileObject.add("hash", new JsonPrimitive(value.getIntegrityCheckBox().isSelected() ? Util.sha512(new File(this.workingDirectory, value.getPath())) : "none"));
             jsonArray.add(fileObject);
         }
 

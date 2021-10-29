@@ -65,7 +65,7 @@ public class Util {
         if(testChecksum.equals("none"))
             return true;
 
-        String fileHash = sha1(file);
+        String fileHash = sha512(file);
 
         return fileHash.equals(testChecksum);
     }
@@ -87,8 +87,8 @@ public class Util {
         return (new File(path).exists()) ? path : "";
     }
 
-    public static String sha1(File file) throws NoSuchAlgorithmException, IOException {
-        MessageDigest sha1 = MessageDigest.getInstance("SHA1");
+    public static String sha512(File file) throws NoSuchAlgorithmException, IOException {
+        MessageDigest sha1 = MessageDigest.getInstance("SHA-512");
         FileInputStream fis = new FileInputStream(file);
 
         byte[] data = new byte[1024];
