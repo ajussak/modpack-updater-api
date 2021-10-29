@@ -1,19 +1,19 @@
 package com.wascardev.modpackupdater.api;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
+import com.google.gson.*;
 import com.wascardev.modpackupdater.api.event.DownloadEvent;
 import com.wascardev.modpackupdater.api.event.ErrorEvent;
 import com.wascardev.modpackupdater.api.event.Event;
 import com.wascardev.modpackupdater.api.event.EventListener;
 
 import java.io.*;
+import java.lang.reflect.Type;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -37,8 +37,35 @@ public class ModpackUpdater implements Runnable {
     private int filesToDownload;
     private int downloadingFile = 0;
 
-    public ModpackUpdater(URL jsonURL) throws IOException {
-        this(new Gson().fromJson(new InputStreamReader(jsonURL.openStream()), ModpackConfig.class));
+    public static ModpackUpdater createUpdaterFromJson(URL jsonURL) throws IOException {
+        GsonBuilder gsonBuilder = new GsonBuilder();
+
+        JsonDeserializer<ModpackConfig> deserializer = (json, typeOfT, context) -> {
+            JsonObject jsonObject = json.getAsJsonObject();
+
+            List<ModpackConfig.File> minecraftFiles = new ArrayList<>();
+            for (Map.Entry<String, JsonElement> entry : jsonObject.get("minecraftFiles").getAsJsonObject().entrySet()) {
+                minecraftFiles.add(new ModpackConfig.File(entry.getKey(), entry.getValue().getAsString()));
+            }
+
+            List<ModpackConfig.File> modpackFiles = new ArrayList<>();
+            for (Map.Entry<String, JsonElement> entry : jsonObject.get("modpackFiles").getAsJsonObject().entrySet()) {
+                modpackFiles.add(new ModpackConfig.File(entry.getKey(), entry.getValue().getAsString()));
+            }
+
+            List<ModpackConfig.File> optionalFiles = new ArrayList<>();
+            for (Map.Entry<String, JsonElement> entry : jsonObject.get("optionalFiles").getAsJsonObject().entrySet()) {
+                optionalFiles.add(new ModpackConfig.File(entry.getKey(), entry.getValue().getAsString()));
+            }
+
+            return new ModpackConfig(jsonObject.get("name").getAsString(), jsonObject.get("downloadFolderURL").getAsString(), minecraftFiles, modpackFiles, optionalFiles);
+        };
+
+        gsonBuilder.registerTypeAdapter(ModpackConfig.class, deserializer);
+
+        Gson customGson = gsonBuilder.create();
+
+        return new ModpackUpdater(customGson.fromJson(new InputStreamReader(jsonURL.openStream()), ModpackConfig.class));
     }
 
     public ModpackUpdater(ModpackConfig modpackConfig) throws IOException {
@@ -141,7 +168,7 @@ public class ModpackUpdater implements Runnable {
         for (ModpackConfig.File modpackFile : fileGroup) {
             File currentFile = new File(destinationFolder, modpackFile.getPath());
             if (clientConfig.getForceUpdate() || !currentFile.exists() || !Util.verifyChecksum(currentFile, modpackFile.getHash())) {
-                downloadFromUrl(new URL(appendSegmentToPath(fileGroup.getUrl(), modpackFile.getPath())), currentFile);
+                downloadFromUrl(new URL(appendSegmentToPath(downloadFolderURL.toString(), modpackFile.getPath())), currentFile);
             }
             this.downloadingFile++;
         }
@@ -190,7 +217,7 @@ public class ModpackUpdater implements Runnable {
 
     }
 
-    private void startGame() throws IOException, MinecraftLauncerNotFoundException {
+    public void startGame() throws IOException, MinecraftLauncerNotFoundException {
         sendEvent(new Event(WorkState.LAUNCHING));
         String path = clientConfig.getMinecraftLauncherPath();
 
