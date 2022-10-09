@@ -207,7 +207,7 @@ public class ModpackUpdater implements Runnable {
             assert modpackPath != null;
             modpackProfile.addProperty("gameDir", modpackPath.getPath());
             modpackProfile.addProperty("lastVersionId", modpackConfig.getName());
-            modpackProfile.addProperty("javaArgs", "-Xmx" + clientConfig.getRam() + "M -XX:+UseConcMarkSweepGC -XX:+CMSIncrementalMode -XX:-UseAdaptiveSizePolicy -Xmn128M");
+            modpackProfile.addProperty("javaArgs", "-Xmx" + clientConfig.getRam() + "M -Xmn128M");
             profiles.add(modpackConfig.getName(), modpackProfile);
             jsonObject.remove("profiles");
             jsonObject.add("profiles", profiles);
